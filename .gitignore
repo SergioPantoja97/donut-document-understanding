@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Salidas generadas en tiempo de ejecución
+documento_matricula.png
+factura_ejemplo.png
+factura_ejemplo.json
+cross_attention_*.png
+
+# macOS
+.DS_Store
