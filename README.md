@@ -1,6 +1,6 @@
 # Donut — OCR-free Document Understanding Transformer
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/TU_USUARIO/TU_REPO/blob/main/Donut_Colab_Notebook.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/restrepogerard/donut-document-understanding/blob/main/Donut_Colab_Notebook.ipynb)
 
 Proyecto educativo universitario sobre el paper **"Donut: OCR-free Document Understanding Transformer"** (ECCV 2022, [arXiv:2111.15664](https://arxiv.org/abs/2111.15664)).
 
@@ -58,7 +58,7 @@ Pipeline Donut:         Imagen → Encoder (Swin) → Cross-Attention → Decode
 
 ### Opción 2 — Local
 ```bash
-git clone https://github.com/TU_USUARIO/TU_REPO.git
+git clone https://github.com/restrepogerard/donut-document-understanding.git
 cd TU_REPO
 pip install -r requirements.txt
 # el tokenizer de Donut necesita protobuf + sentencepiece (ya en requirements)
