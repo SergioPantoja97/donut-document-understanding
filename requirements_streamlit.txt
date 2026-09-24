@@ -1,0 +1,6 @@
+streamlit
+torch
+Pillow
+accelerate
+timm
+git+https://github.com/huggingface/transformers.git
