@@ -1,10 +1,11 @@
 import json
 import re
 import time
+import numpy as np
 
 import streamlit as st
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 from transformers import DonutProcessor, VisionEncoderDecoderModel
 
 # ============================================================
@@ -107,6 +108,182 @@ def donut_inference(
     }
 
 
+
+
+def detect_visual_regions(image: Image.Image, cols=8, rows=12, top_k=14):
+    """
+    Heurística visual para localizar regiones con alta variación/contraste.
+    Sirve SOLO para la simulación didáctica del flujo.
+    No es OCR y no representa atención real del modelo.
+    """
+    gray = image.convert("L")
+    arr = np.asarray(gray, dtype=np.float32)
+
+    h, w = arr.shape
+    regions = []
+
+    for r in range(rows):
+        for c in range(cols):
+            x0 = int(c * w / cols)
+            x1 = int((c + 1) * w / cols)
+            y0 = int(r * h / rows)
+            y1 = int((r + 1) * h / rows)
+
+            patch = arr[y0:y1, x0:x1]
+            if patch.size == 0:
+                continue
+
+            # Mezcla de contraste y oscuridad para priorizar zonas tipo texto.
+            contrast = float(np.std(patch))
+            darkness = float(255.0 - np.mean(patch))
+            score = contrast * 0.75 + darkness * 0.25
+
+            regions.append((score, (x0, y0, x1, y1)))
+
+    regions.sort(key=lambda x: x[0], reverse=True)
+    return [box for _, box in regions[:top_k]]
+
+
+def draw_regions_frame(image: Image.Image, regions, visible_count, active_index=None):
+    frame = image.copy().convert("RGB")
+    draw = ImageDraw.Draw(frame, "RGBA")
+
+    for i, (x0, y0, x1, y1) in enumerate(regions[:visible_count]):
+        if active_index is not None and i == active_index:
+            fill = (60, 220, 100, 70)
+            outline = (20, 170, 70, 255)
+            width = 5
+        else:
+            fill = (70, 210, 110, 38)
+            outline = (30, 180, 80, 210)
+            width = 3
+
+        draw.rectangle(
+            [x0, y0, x1, y1],
+            fill=fill,
+            outline=outline,
+            width=width
+        )
+
+    return frame
+
+
+def animate_visual_simulation(image: Image.Image, placeholder, status_placeholder):
+    """
+    Simulación visual progresiva del recorrido:
+    imagen -> regiones visuales -> encoder -> representación.
+
+    IMPORTANTE:
+    no son bounding boxes OCR ni mapas reales de atención.
+    """
+    regions = detect_visual_regions(image)
+
+    status_placeholder.info("Simulación visual: analizando regiones del documento...")
+
+    # Mostrar cajas progresivamente.
+    for i in range(1, len(regions) + 1):
+        frame = draw_regions_frame(
+            image,
+            regions,
+            visible_count=i,
+            active_index=i - 1
+        )
+
+        placeholder.image(
+            frame,
+            caption=f"Simulación visual — región {i} de {len(regions)}",
+            use_container_width=True
+        )
+        time.sleep(0.10)
+
+    status_placeholder.info("Simulación visual: encoder construyendo representaciones...")
+
+    # Pulso visual sobre todas las zonas seleccionadas.
+    for _ in range(2):
+        frame = image.copy().convert("RGB")
+        draw = ImageDraw.Draw(frame, "RGBA")
+
+        for x0, y0, x1, y1 in regions:
+            draw.rectangle(
+                [x0, y0, x1, y1],
+                fill=(40, 210, 90, 55),
+                outline=(20, 170, 70, 255),
+                width=4
+            )
+
+        placeholder.image(
+            frame,
+            caption="Regiones visuales destacadas para la simulación del encoder",
+            use_container_width=True
+        )
+        time.sleep(0.25)
+
+    return regions
+
+
+def truncate_text(value, max_chars=1200):
+    value = str(value)
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars] + "\n\n... [salida recortada]"
+
+
+def show_pipeline_simulation(image, output, regions):
+    st.markdown("### Simulación visual del procesamiento")
+
+    st.warning(
+        "Visualización didáctica: las cajas verdes son regiones detectadas por una heurística "
+        "de contraste para explicar el flujo. No son OCR ni pesos reales de atención."
+    )
+
+    c1, c2, c3 = st.columns([1.15, 1, 1])
+
+    with c1:
+        st.markdown("#### 1. Regiones visuales")
+        final_frame = draw_regions_frame(
+            image,
+            regions,
+            visible_count=len(regions)
+        )
+        st.image(
+            final_frame,
+            caption="Regiones visuales resaltadas",
+            use_container_width=True
+        )
+        st.caption("Simulación de zonas relevantes antes de la representación interna.")
+
+    with c2:
+        st.markdown("#### 2. Secuencia generada")
+        st.code(
+            truncate_text(output["clean_sequence"], 1000),
+            language="text"
+        )
+        st.caption("El decoder genera tokens de forma autoregresiva.")
+
+    with c3:
+        st.markdown("#### 3. Resultado estructurado")
+        st.json(output["result"], expanded=False)
+        st.caption("La secuencia se transforma a una estructura tipo JSON.")
+
+    st.markdown("#### Q, K, V y Cross-Attention")
+
+    q, k, v = st.columns(3)
+    with q:
+        st.markdown("**Q · Query**")
+        st.write("Proviene del decoder: qué información necesita para generar el siguiente token.")
+    with k:
+        st.markdown("**K · Key**")
+        st.write("Proviene del encoder: ayuda a identificar qué representaciones visuales son relevantes.")
+    with v:
+        st.markdown("**V · Value**")
+        st.write("Proviene del encoder: contiene la información visual que se incorpora al contexto.")
+
+    st.info(
+        "En cross-attention, el decoder compara Q con K y usa los V asociados "
+        "para producir el siguiente token."
+    )
+
+
 # ============================================================
 # INTERFAZ
 # ============================================================
@@ -151,7 +328,25 @@ if run_button:
     if image is None:
         st.warning("Primero debes cargar una imagen.")
     else:
-        with st.spinner("Procesando documento..."):
+        st.markdown("### Procesamiento en tiempo real")
+        live_col1, live_col2 = st.columns([1.2, 1])
+
+        with live_col1:
+            live_image = st.empty()
+
+        with live_col2:
+            live_status = st.empty()
+            live_status.info("Iniciando simulación visual...")
+
+        regions = animate_visual_simulation(
+            image=image,
+            placeholder=live_image,
+            status_placeholder=live_status
+        )
+
+        live_status.info("Ejecutando inferencia real con Donut...")
+
+        with st.spinner("Procesando documento con el modelo..."):
             output = donut_inference(
                 image=image,
                 processor=processor,
@@ -162,6 +357,7 @@ if run_button:
                 no_repeat_ngram_size=no_repeat_ngram_size,
             )
 
+        live_status.success("Inferencia completada.")
         st.success("Inferencia completada.")
 
         metric1, metric2, metric3 = st.columns(3)
@@ -188,6 +384,8 @@ if run_button:
                 use_container_width=True
             )
 
+        show_pipeline_simulation(image, output, regions)
+
         with st.expander("Ver secuencia limpia generada por Donut"):
             st.code(output["clean_sequence"], language="text")
 
@@ -197,4 +395,3 @@ if run_button:
         if not output["parse_ok"]:
             st.warning("La salida no se pudo convertir perfectamente a JSON.")
             st.write("Detalle:", output["parse_error"])
-
